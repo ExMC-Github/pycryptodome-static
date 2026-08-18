@@ -194,6 +194,37 @@ if(MSVC)
 endif()
 
 # -------------------------------------------------------------------
+# Export table (.def), MSVC only
+#
+# The Python frontend resolves the raw C primitives with ctypes through
+# a handle to the current process (see lib/Crypto/Util/_raw_api.py).
+# On Windows that only works for symbols present in the export table of
+# the host executable, so this rule regenerates pycryptodome_static.def
+# from the symbols of the static library. A host links it with:
+#   /WHOLEARCHIVE:pycryptodome_static.lib /DEF:pycryptodome_static.def
+# -------------------------------------------------------------------
+if(MSVC)
+    get_filename_component(PCT_LINKER_DIR "${CMAKE_LINKER}" DIRECTORY)
+    find_program(PCT_DUMPBIN dumpbin HINTS "${PCT_LINKER_DIR}")
+    if(NOT PCT_DUMPBIN)
+        message(FATAL_ERROR "dumpbin not found (looked in ${PCT_LINKER_DIR})")
+    endif()
+
+    set(PCT_DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/pycryptodome_static.def")
+    add_custom_command(
+        OUTPUT "${PCT_DEF_FILE}"
+        COMMAND "${CMAKE_COMMAND}"
+                "-DDUMPBIN=${PCT_DUMPBIN}"
+                "-DSTATIC_LIB=$<TARGET_FILE:pycryptodome_static>"
+                "-DDEF_FILE=${PCT_DEF_FILE}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_def.cmake"
+        DEPENDS pycryptodome_static
+        COMMENT "Generating pycryptodome_static.def"
+        VERBATIM)
+    add_custom_target(pycryptodome_def ALL DEPENDS "${PCT_DEF_FILE}")
+endif()
+
+# -------------------------------------------------------------------
 # Installation
 # -------------------------------------------------------------------
 include(GNUInstallDirs)
@@ -203,6 +234,11 @@ install(TARGETS pycryptodome_static
 
 install(FILES src/pycryptodome_init.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+if(MSVC)
+    install(FILES "${PCT_DEF_FILE}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 # -------------------------------------------------------------------
 # Example / link check: forces every object of the static library to
@@ -225,8 +261,23 @@ if(PYCRYPTODOME_BUILD_EXAMPLES)
     target_link_libraries(pycryptodome_link_repl_test PRIVATE
         pycryptodome_static
         Python3::Python)
+    if(MSVC)
+        # Pull every object in and re-export its symbols so that the
+        # Python frontend can resolve them via ctypes.CDLL(None).
+        target_link_options(pycryptodome_link_repl_test PRIVATE
+            "/WHOLEARCHIVE:$<TARGET_FILE:pycryptodome_static>"
+            "/DEF:${CMAKE_CURRENT_BINARY_DIR}/pycryptodome_static.def")
+        add_dependencies(pycryptodome_link_repl_test pycryptodome_def)
+    endif()
     if(BUILD_TESTING)
-        # With piped input the REPL reads EOF and exits cleanly.
-        add_test(NAME link_repl_test COMMAND pycryptodome_link_repl_test)
+        # Runs the smoke script through the embedded interpreter, with
+        # the pure-Python frontend made importable via PYTHONPATH.
+        # Without arguments the executable starts a REPL instead.
+        add_test(NAME link_repl_test
+            COMMAND pycryptodome_link_repl_test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/repl_smoke.py")
+        set_tests_properties(link_repl_test PROPERTIES
+            ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/lib"
+            PASS_REGULAR_EXPRESSION "AES-EAX roundtrip OK")
     endif()
 endif()

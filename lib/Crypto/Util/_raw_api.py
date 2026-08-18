@@ -182,6 +182,10 @@ except ImportError:
         return ctypes.c_ubyte(c)
 
     def load_lib(name, cdecl):
+        if name is None:
+            # Null handle: look up the symbols of the current process
+            # (static-library build of PyCryptodome).
+            return CDLL(None)
         if not cached_architecture:
             # platform.architecture() creates a subprocess, so caching the
             # result makes successive imports faster.
@@ -312,7 +316,12 @@ def load_pycryptodome_raw_lib(name, cdecl):
             return load_lib(full_name, cdecl)
         except OSError as exp:
             attempts.append("Cannot load '%s': %s" % (filename, str(exp)))
-    raise OSError("Cannot load native module '%s': %s" % (name, ", ".join(attempts)))
+
+    # Static-library build: no .pyd exists on disk because the native
+    # code was linked into the current process (an application that
+    # embeds CPython and links pycryptodome_static.lib). The symbols are
+    # then looked up through a handle to the current process itself.
+    return load_lib(None, cdecl)
 
 
 def is_buffer(x):

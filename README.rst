@@ -41,7 +41,13 @@ The result is ``build/Release/pycryptodome_static.lib``, together with:
   that registers all ``PyInit_*()`` entry points with
   ``PyImport_AppendInittab()``, starts CPython and opens an interactive
   REPL where the registered modules are visible through
-  ``sys.builtin_module_names``.
+  ``sys.builtin_module_names``. Given a script path it runs the script
+  instead — this is what the ``link_repl_test`` CTest does, executing
+  ``tests/repl_smoke.py`` (an AES-EAX round trip, SHA-256 and scrypt)
+  with the pure-Python frontend, fully inside the host process;
+* ``build/pycryptodome_static.def`` — the export table of the static
+  library, regenerated at build time from its symbols with ``dumpbin``
+  (see below).
 
 To install the library and the public header into ``CMAKE_INSTALL_PREFIX``::
 
@@ -73,6 +79,35 @@ act as the public headers (``common.h``, ``errors.h``, ``block_base.h``,
 or, with an existing Visual Studio project, add the include paths for
 ``src`` and ``src/libtom``, then link ``pycryptodome_static.lib``.
 
+Running the pure-Python frontend inside the host
+------------------------------------------------
+
+The ``lib/Crypto`` package works inside a host that embeds CPython,
+without any ``.pyd`` on disk. Two things make it possible:
+
+1. ``lib/Crypto/Util/_raw_api.py`` was patched: when
+   ``load_pycryptodome_raw_lib()`` cannot find a ``.pyd`` file, it now
+   falls back to a handle of the **current process** (``ctypes.CDLL(None)``
+   / ``ffi.dlopen(None)``) and resolves the C primitives there. This is
+   the only divergence from upstream PyCryptodome; when a ``.pyd`` is
+   found the behaviour is unchanged.
+2. The host executable must **export** the primitives. On Windows,
+   ``ctypes`` can only see symbols present in the export table, so link
+   with ``/WHOLEARCHIVE`` (to pull every object in) and the generated
+   ``pycryptodome_static.def`` (to re-export them)::
+
+       link ... pycryptodome_static.lib /WHOLEARCHIVE:pycryptodome_static.lib /DEF:pycryptodome_static.def
+
+   The ``.def`` file is produced automatically during the build
+   (``cmake/extract_def.cmake``) and installed together with the library;
+   it only needs to be regenerated when the sources change.
+
+Then make ``lib/Crypto`` importable (``PYTHONPATH``, or copy the folder
+into the interpreter's ``site-packages``), and ``from Crypto.Cipher
+import AES`` works with all cryptographic code executed from the static
+library inside the host process — see ``tests/repl_smoke.py`` and the
+``pycryptodome_link_repl_test`` example for a complete demonstration.
+
 .. note::
 
     The ``PyInit_*()`` stubs return ``NULL`` by design: in the original
@@ -80,20 +115,26 @@ or, with an existing Visual Studio project, add the include paths for
     through ctypes/cffi as plain DLLs, not through the import machinery.
     When merging everything into a static library, the host program is
     responsible for wiring the primitives and the entry points into its
-    own environment. The pure-Python frontend is still available under
-    ``lib/Crypto`` for reference and for embedding scenarios.
+    own environment. The pure-Python frontend under ``lib/Crypto`` keeps
+    working as described above because it resolves the primitives from
+    the current process, not from an import.
 
 Layout
 ------
 
 * ``CMakeLists.txt`` — build description of the static library
+* ``cmake/extract_def.cmake`` — regenerates ``pycryptodome_static.def``
+  from the symbols of the library (``dumpbin /SYMBOLS``)
 * ``src/`` — C sources (the former extension modules), plus
   ``pycryptodome_init.h``
-* ``lib/Crypto`` — the pure-Python frontend of PyCryptodome
+* ``lib/Crypto`` — the pure-Python frontend of PyCryptodome (patched,
+  see "Running the pure-Python frontend inside the host")
 * ``examples/consume_static.c`` — example consumer / link check
 * ``examples/consume_repl.c`` — example embedder that starts a REPL
   after registering the ``PyInit_*()`` entry points
   (target ``pycryptodome_link_repl_test``)
+* ``tests/repl_smoke.py`` — AES/SHA256/scrypt smoke test executed by
+  ``link_repl_test`` inside the embedded interpreter
 
 Notes on the conversion
 -----------------------

@@ -36,7 +36,17 @@ Build steps
      that links the whole library and runs a smoke test
    * ``build/Release/pycryptodome_link_repl_test.exe`` — example embedder
      that registers all ``PyInit_*()`` entry points in the inittab, starts
-     CPython and opens an interactive REPL
+     CPython and opens an interactive REPL (or runs a script given as
+     argument; the ``link_repl_test`` CTest runs ``tests/repl_smoke.py``
+     this way, with ``PYTHONPATH`` pointing at ``lib``)
+   * ``build/pycryptodome_static.def`` — export table of the static
+     library, regenerated with ``dumpbin`` whenever the sources change
+
+   The installation ships ``pycryptodome_static.lib``,
+   ``pycryptodome_init.h`` and ``pycryptodome_static.def``. A host that
+   wants to run the pure-Python frontend (``lib/Crypto``) inside its own
+   process must link with ``/WHOLEARCHIVE`` and ``/DEF:`` as documented
+   in the README.
 
 #. (Optional) Install the library and the public header::
 

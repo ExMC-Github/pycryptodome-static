@@ -14,6 +14,16 @@
  * NULL by design (see FAKE_INIT in src/common.h): they exist so that
  * a host program can wire the native code into its own environment,
  * not to provide fully importable modules.
+ *
+ * The pure-Python frontend (the Crypto package) does not import those
+ * entry points either: it resolves the raw C primitives with ctypes
+ * through a handle to the current process. For that to work the host
+ * executable must link the static library with /WHOLEARCHIVE and
+ * export its symbols with the generated pycryptodome_static.def (see
+ * CMakeLists.txt).
+ *
+ * If a script path is given as the only argument, the program runs
+ * that file instead of opening the REPL (used by CTest).
  * =================================================================== */
 
 #include <stdio.h>
@@ -22,7 +32,7 @@
 
 #include "pycryptodome_init.h"
 
-int main(void)
+int main(int argc, char **argv)
 {
     int registered = 0;
     int failures = 0;
@@ -57,8 +67,23 @@ int main(void)
         "      % (sys.version.split()[0], len(mods)))\n"
     );
 
-    printf("Starting the REPL (exit() or Ctrl-Z + Enter to quit)\n\n");
-    PyRun_InteractiveLoop(stdin, "<stdin>");
+    if (argc > 1) {
+        FILE *script = fopen(argv[1], "rb");
+        if (script == NULL) {
+            fprintf(stderr, "Cannot open script '%s'\n", argv[1]);
+            Py_FinalizeEx();
+            return 1;
+        }
+        if (PyRun_SimpleFile(script, argv[1]) != 0) {
+            PyErr_Print();
+            Py_FinalizeEx();
+            return 1;
+        }
+        fclose(script);
+    } else {
+        printf("Starting the REPL (exit() or Ctrl-Z + Enter to quit)\n\n");
+        PyRun_InteractiveLoop(stdin, "<stdin>");
+    }
 
     if (Py_FinalizeEx() < 0) {
         return 120;
