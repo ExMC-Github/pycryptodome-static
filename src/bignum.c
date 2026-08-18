@@ -247,7 +247,10 @@ STATIC void add_mod(uint64_t* out, const uint64_t* a, const uint64_t* b, const u
  * @param nw        The number of 64-bit words in all parameters
  * @return          0 for success, the relevant error code otherwise
  */
-int sub_mod(uint64_t *out, const uint64_t *a, const uint64_t *b, const uint64_t *modulus, uint64_t *tmp1, uint64_t *tmp2, size_t nw)
+/* STATIC: bignum.c is #included by several translation units (mont.c,
+ * mod25519.c); each unit must keep a private copy to avoid duplicate
+ * symbols when everything is merged into one static library. */
+STATIC int sub_mod(uint64_t *out, const uint64_t *a, const uint64_t *b, const uint64_t *modulus, uint64_t *tmp1, uint64_t *tmp2, size_t nw)
 {
     unsigned i;
     unsigned carry, borrow1 , borrow2;
