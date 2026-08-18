@@ -31,11 +31,17 @@ Requirements:
     cmake -S . -B build -DPython3_ROOT_DIR="C:/Program Files/Python314"
     cmake --build build --config Release
 
-The result is ``build/Release/pycryptodome_static.lib``, together with
-``build/Release/pycryptodome_link_check.exe``, a sample consumer that
-forces every object of the library to be linked (checking that all 42
-``PyInit_*()`` entry points resolve and that there are no duplicate
-symbols) and runs a small smoke test.
+The result is ``build/Release/pycryptodome_static.lib``, together with:
+
+* ``build/Release/pycryptodome_link_check.exe``, a sample consumer that
+  forces every object of the library to be linked (checking that all 42
+  ``PyInit_*()`` entry points resolve and that there are no duplicate
+  symbols) and runs a small smoke test;
+* ``build/Release/pycryptodome_link_repl_test.exe``, a sample embedder
+  that registers all ``PyInit_*()`` entry points with
+  ``PyImport_AppendInittab()``, starts CPython and opens an interactive
+  REPL where the registered modules are visible through
+  ``sys.builtin_module_names``.
 
 To install the library and the public header into ``CMAKE_INSTALL_PREFIX``::
 
@@ -85,6 +91,9 @@ Layout
   ``pycryptodome_init.h``
 * ``lib/Crypto`` — the pure-Python frontend of PyCryptodome
 * ``examples/consume_static.c`` — example consumer / link check
+* ``examples/consume_repl.c`` — example embedder that starts a REPL
+  after registering the ``PyInit_*()`` entry points
+  (target ``pycryptodome_link_repl_test``)
 
 Notes on the conversion
 -----------------------

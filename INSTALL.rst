@@ -34,6 +34,9 @@ Build steps
      all C primitives and all 42 ``PyInit_*()`` entry points
    * ``build/Release/pycryptodome_link_check.exe`` — example consumer
      that links the whole library and runs a smoke test
+   * ``build/Release/pycryptodome_link_repl_test.exe`` — example embedder
+     that registers all ``PyInit_*()`` entry points in the inittab, starts
+     CPython and opens an interactive REPL
 
 #. (Optional) Install the library and the public header::
 

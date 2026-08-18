@@ -35,8 +35,9 @@ project(pycryptodome_static
 
 # The C code only includes Python.h (for the PyInit_* stubs); a static
 # library is never linked against pythonXY.lib itself. Development.Module
-# provides the header directory only.
-find_package(Python3 REQUIRED COMPONENTS Development.Module)
+# provides the header directory only. Development.Embed is needed by the
+# REPL example, which starts an interpreter of its own.
+find_package(Python3 REQUIRED COMPONENTS Development.Module Development.Embed)
 
 option(PYCRYPTODOME_BUILD_EXAMPLES "Build the example that links the static library" ON)
 include(CTest)
@@ -216,5 +217,16 @@ if(PYCRYPTODOME_BUILD_EXAMPLES)
     endif()
     if(BUILD_TESTING)
         add_test(NAME link_check COMMAND pycryptodome_link_check)
+    endif()
+
+    # Embeds CPython: registers every PyInit_*() entry point in the
+    # inittab, then starts an interactive REPL.
+    add_executable(pycryptodome_link_repl_test examples/consume_repl.c)
+    target_link_libraries(pycryptodome_link_repl_test PRIVATE
+        pycryptodome_static
+        Python3::Python)
+    if(BUILD_TESTING)
+        # With piped input the REPL reads EOF and exits cleanly.
+        add_test(NAME link_repl_test COMMAND pycryptodome_link_repl_test)
     endif()
 endif()
